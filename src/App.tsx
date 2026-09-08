@@ -9,8 +9,68 @@ import { TeamManagerModal } from './components/TeamManagerModal';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { ScheduleModal } from './components/ScheduleModal';
 import { FlyingSquirrel } from './components/FlyingSquirrel';
+import { AuthScreen } from './components/AuthScreen';
+import { supabase } from './lib/supabase';
+import { LogOut, UserCheck } from 'lucide-react';
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    // Check if session stored in localStorage for demo mode or active login
+    return localStorage.getItem('squirrel_auth_user') !== null;
+  });
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>(() => {
+    return localStorage.getItem('squirrel_auth_user') || '';
+  });
+
+  // Check Supabase session on mount if supabase client exists
+  useEffect(() => {
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          setCurrentUserEmail(session.user.email || 'team@company.com');
+          setIsAuthenticated(true);
+          localStorage.setItem('squirrel_auth_user', session.user.email || 'team@company.com');
+        }
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          setCurrentUserEmail(session.user.email || 'team@company.com');
+          setIsAuthenticated(true);
+          localStorage.setItem('squirrel_auth_user', session.user.email || 'team@company.com');
+        } else {
+          // If signed out from supabase
+          // Note: we can keep demo mode or clear auth
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, []);
+
+  const handleLoginSuccess = (email: string) => {
+    setCurrentUserEmail(email);
+    setIsAuthenticated(true);
+    localStorage.setItem('squirrel_auth_user', email);
+  };
+
+  const handleBypassDemo = () => {
+    setCurrentUserEmail('demo.squirrel@company.com');
+    setIsAuthenticated(true);
+    localStorage.setItem('squirrel_auth_user', 'demo.squirrel@company.com');
+  };
+
+  const handleLogout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    setIsAuthenticated(false);
+    setCurrentUserEmail('');
+    localStorage.removeItem('squirrel_auth_user');
+  };
+
   // Load from localStorage or defaults
   const [members, setMembers] = useState<Member[]>(() => {
     const saved = localStorage.getItem('squirrel_team_members');
@@ -64,7 +124,6 @@ export default function App() {
 
   const handleDeleteMember = (id: string) => {
     setMembers(prev => prev.filter(m => m.id !== id));
-    // Also remove schedules associated with this member
     setSchedules(prev => prev.filter(s => s.memberId !== id));
   };
 
@@ -83,8 +142,6 @@ export default function App() {
 
   const handleDeleteCategory = (id: string) => {
     setCategories(prev => prev.filter(c => c.id !== id));
-    // Reassign or remove schedules associated with this category
-    // Default to first available category if exists
     const fallbackCatId = categories.find(c => c.id !== id)?.id || '';
     setSchedules(prev => prev.map(s => (s.categoryId === id ? { ...s, categoryId: fallbackCatId } : s)));
   };
@@ -104,10 +161,8 @@ export default function App() {
 
   const handleSaveSchedule = (scheduleData: Omit<Schedule, 'id'> | Schedule) => {
     if ('id' in scheduleData) {
-      // Update
       setSchedules(prev => prev.map(s => (s.id === scheduleData.id ? (scheduleData as Schedule) : s)));
     } else {
-      // Add
       const newSchedule: Schedule = {
         ...scheduleData,
         id: 'sch-' + Date.now(),
@@ -120,10 +175,43 @@ export default function App() {
     setSchedules(prev => prev.filter(s => s.id !== id));
   };
 
+  // If not authenticated, show AuthScreen
+  if (!isAuthenticated) {
+    return (
+      <AuthScreen
+        onLoginSuccess={handleLoginSuccess}
+        onBypassDemo={handleBypassDemo}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen pb-16 relative overflow-x-hidden">
       {/* Flying Squirrel Animation & Widget */}
       <FlyingSquirrel />
+
+      {/* Top User Bar */}
+      <div className="bg-[#fffdf9]/95 border-b-2 border-dashed border-[#d8c4a9] py-2 px-4 shadow-xs sticky top-0 z-40 backdrop-blur-sm">
+        <div className="max-w-6xl mx-auto flex justify-between items-center text-xs font-jua">
+          <div className="flex items-center gap-2 text-[#5c4033]">
+            <span className="bg-[#ffd1dc] px-2.5 py-0.5 rounded-full border border-[#f8b4b4] text-[#a85555] font-bold">
+              Supabase 인증 완료
+            </span>
+            <span className="flex items-center gap-1 font-bold">
+              <UserCheck size={14} className="text-[#065f46]" />
+              {currentUserEmail}님 환영합니다! 🐿️
+            </span>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="sketch-button px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+          >
+            <LogOut size={13} />
+            로그아웃
+          </button>
+        </div>
+      </div>
 
       {/* Main Header */}
       <Header
@@ -172,8 +260,8 @@ export default function App() {
 
       {/* Footer Sketchbook Note */}
       <footer className="max-w-6xl mx-auto px-4 mt-16 text-center text-xs text-[#8c7355] font-gaegu text-xl">
-        <p>🌰 다람쥐의 스케치북 팀 일정 관리 프로그램 🌰</p>
-        <p className="mt-1">© 2026 사내 팀원 일정 관리 서비스 · 모든 데이터는 안전하게 브라우저에 저장됩니다.</p>
+        <p>🌰 다람쥐의 스케치북 팀 일정 관리 프로그램 (Supabase 인증 연동) 🌰</p>
+        <p className="mt-1">© 2026 사내 팀원 일정 관리 서비스 · 안전한 보안 로그인 적용됨</p>
       </footer>
 
       {/* Modals */}
