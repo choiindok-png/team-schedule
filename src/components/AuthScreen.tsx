@@ -182,6 +182,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBypass
             </div>
           </div>
 
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              id="autoLogin"
+              defaultChecked
+              className="w-4 h-4 accent-[#5c4033] cursor-pointer"
+            />
+            <label htmlFor="autoLogin" className="text-xs text-[#5c4033] font-jua cursor-pointer">
+              자동 로그인 유지 (브라우저를 닫아도 로그인 유지) ✨
+            </label>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
